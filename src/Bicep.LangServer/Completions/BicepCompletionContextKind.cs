@@ -36,5 +36,10 @@ namespace Bicep.LanguageServer.Completions
         /// The current location needs a property name. 
         /// </summary>
         PropertyName = 1 << 4,
+
+        /// <summary>
+        /// The current location needs a property value.
+        /// </summary>
+        PropertyValue = 1 << 5
     }
 }

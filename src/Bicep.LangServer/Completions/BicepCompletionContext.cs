@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using Bicep.Core.Navigation;
 using Bicep.Core.Parser;
@@ -11,24 +12,38 @@ namespace Bicep.LanguageServer.Completions
 {
     public class BicepCompletionContext
     {
-        public BicepCompletionContext(BicepCompletionContextKind kind, ObjectSyntax? @object = null)
+        private static readonly ImmutableHashSet<TokenType> PartialPropertyValueTokenTypes = new[]
+        {
+            TokenType.Colon,
+            TokenType.StringComplete,
+            TokenType.Identifier,
+            TokenType.FalseKeyword,
+            TokenType.TrueKeyword,
+            TokenType.NullKeyword
+        }.ToImmutableHashSet();
+
+        public BicepCompletionContext(BicepCompletionContextKind kind, ObjectSyntax? @object = null, ObjectPropertySyntax? property = null)
         {
             this.Kind = kind;
             this.Object = @object;
+            this.Property = property;
         }
 
         public BicepCompletionContextKind Kind { get; }
 
         public ObjectSyntax? Object { get; }
 
+        public ObjectPropertySyntax? Property { get; }
+
         public static BicepCompletionContext Create(ProgramSyntax syntax, int offset)
         {
             var matchingNodes = FindNodesMatchingOffset(syntax, offset);
             var kind = ConvertFlag(IsDeclarationStartContext(matchingNodes, offset), BicepCompletionContextKind.DeclarationStart) |
                        GetDeclarationTypeFlags(matchingNodes, offset) |
-                       ConvertFlag(IsPropertyStartContext(matchingNodes, offset, out var @object), BicepCompletionContextKind.PropertyName);
+                       ConvertFlag(IsPropertyNameContext(matchingNodes, out var @object), BicepCompletionContextKind.PropertyName) |
+                       ConvertFlag(IsPropertyValueContext(matchingNodes, offset, out var property), BicepCompletionContextKind.PropertyValue);
 
-            return new BicepCompletionContext(kind, @object);
+            return new BicepCompletionContext(kind, @object, property);
         }
 
         /// <summary>
@@ -142,7 +157,7 @@ namespace Bicep.LanguageServer.Completions
             return false;
         }
 
-        private static bool IsPropertyStartContext(List<SyntaxBase> matchingNodes, int offset, out ObjectSyntax? @object)
+        private static bool IsPropertyNameContext(List<SyntaxBase> matchingNodes, out ObjectSyntax? @object)
         {
             @object = null;
 
@@ -178,6 +193,46 @@ namespace Bicep.LanguageServer.Completions
                     }
 
                     break;
+            }
+
+            return false;
+        }
+
+        private static bool IsPropertyValueContext(List<SyntaxBase> matchingNodes, int offset, out ObjectPropertySyntax? property)
+        {
+            property = null;
+
+            // find the innermost property
+            var propertyIndex = matchingNodes.FindLastIndex(matchingNodes.Count - 1, node => node is ObjectPropertySyntax);
+            if (propertyIndex < 0)
+            {
+                // none of the nodes are object properties,
+                // so we can't possibly be in a property value context
+                return false;
+            }
+
+            property = (ObjectPropertySyntax) matchingNodes[propertyIndex];
+
+            // how many matching nodes remain including the object node itself
+            int nodeCount = matchingNodes.Count - propertyIndex;
+
+            switch (nodeCount)
+            {
+                case 1:
+                    // the cursor position may be in the trivia following the colon that follows the property name
+                    // if that's the case, the offset should match the end of the property span exactly
+                    return offset == property.Span.Position + property.Span.Length;
+
+                case 2:
+                case 3:
+                case 4:
+                    // case 2: the cursor position may be after the colon that follows the property name
+                    //         if that's the case the innermost matching node should be a Colon token
+                    // case 3: the cursor could be inside a string value
+                    //         if that's the case, the innermost matching node should be a string token
+                    // case 4: the cursor could be in a partial identifier/keyword name,
+                    //         which will present as either a keyword or identifier token
+                    return matchingNodes[^1] is Token token && PartialPropertyValueTokenTypes.Contains(token.Type);
             }
 
             return false;
