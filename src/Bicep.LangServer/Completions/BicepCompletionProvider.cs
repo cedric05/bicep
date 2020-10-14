@@ -145,8 +145,6 @@ namespace Bicep.LanguageServer.Completions
 
             // in order to provide completions for property names,
             // we need to establish the type of the object first
-            var type = model.GetTypeInfo(context.Object);
-
             var declaredType = model.GetDeclaredType(context.Object);
             if (declaredType == null)
             {
@@ -179,12 +177,23 @@ namespace Bicep.LanguageServer.Completions
 
         private IEnumerable<CompletionItem> GetObjectPropertyValueCompletions(SemanticModel model, BicepCompletionContext context)
         {
-            if (context.Kind.HasFlag(BicepCompletionContextKind.PropertyValue) == false)
+            if (context.Kind.HasFlag(BicepCompletionContextKind.PropertyValue) == false || context.Property == null)
             {
                 return Enumerable.Empty<CompletionItem>();
             }
 
-            return CompletionItemFactory.CreateKeywordCompletion("lol", "lol").AsEnumerable();
+            var declaredType = model.GetDeclaredType(context.Property);
+            return GetPropertyValueCompletions(declaredType);
+        }
+
+        private static IEnumerable<CompletionItem> GetPropertyValueCompletions(TypeSymbol? propertyType)
+        {
+            switch (propertyType)
+            {
+                case PrimitiveType primitive:
+                default:
+                    return Enumerable.Empty<CompletionItem>();
+            }
         }
     }
 }
