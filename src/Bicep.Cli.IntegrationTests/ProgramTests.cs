@@ -126,7 +126,7 @@ namespace Bicep.Cli.IntegrationTests
 
             actual.Should().EqualWithJsonDiffOutput(
                 JToken.Parse(dataSet.Compiled!),
-                expectedLocation: Path.Combine("src", "Bicep.Core.Samples", dataSet.Name, DataSet.TestFileMainCompiled),
+                expectedLocation: Path.Combine("src", "Bicep.Core.Samples", "Files", dataSet.Name, DataSet.TestFileMainCompiled),
                 actualLocation: compiledFilePath);
         }
 
@@ -152,7 +152,7 @@ namespace Bicep.Cli.IntegrationTests
 
             actual.Should().EqualWithJsonDiffOutput(
                 JToken.Parse(dataSet.Compiled!),
-                expectedLocation: Path.Combine("src", "Bicep.Core.Samples", dataSet.Name, DataSet.TestFileMainCompiled),
+                expectedLocation: Path.Combine("src", "Bicep.Core.Samples", "Files", dataSet.Name, DataSet.TestFileMainCompiled),
                 actualLocation: compiledFilePath);
         }
 
@@ -185,7 +185,7 @@ namespace Bicep.Cli.IntegrationTests
 
                 actual.Should().EqualWithJsonDiffOutput(
                     JToken.Parse(dataSet.Compiled!),
-                    expectedLocation: Path.Combine("src", "Bicep.Core.Samples", dataSet.Name, DataSet.TestFileMainCompiled),
+                    expectedLocation: Path.Combine("src", "Bicep.Core.Samples", "Files", dataSet.Name, DataSet.TestFileMainCompiled),
                     actualLocation: compiledFilePath);
             }
         }
@@ -234,7 +234,7 @@ namespace Bicep.Cli.IntegrationTests
             output.Should().BeEmpty();
             error.Should().NotBeEmpty();
 
-            var diagnostics = GetAllDiagnostics(dataSet.Bicep, bicepFilePath);
+            var diagnostics = GetAllDiagnostics(bicepFilePath);
             error.Should().ContainAll(diagnostics);
         }
 
@@ -253,7 +253,7 @@ namespace Bicep.Cli.IntegrationTests
             output.Should().BeEmpty();
             error.Should().NotBeEmpty();
 
-            var diagnostics = GetAllDiagnostics(dataSet.Bicep, bicepFilePath);
+            var diagnostics = GetAllDiagnostics(bicepFilePath);
             error.Should().ContainAll(diagnostics);
         }
 
@@ -277,9 +277,7 @@ namespace Bicep.Cli.IntegrationTests
             output.Should().BeEmpty();
             error.Should().NotBeEmpty();
 
-            var diagnosticsFromAllFiles = invalidDataSets
-                .Zip(bicepFiles, (ds, file) => GetAllDiagnostics(ds.Bicep, file))
-                .SelectMany(e => e);
+            var diagnosticsFromAllFiles = bicepFiles.SelectMany(file => GetAllDiagnostics(file));
 
             error.Should().ContainAll(diagnosticsFromAllFiles);
         }
@@ -304,9 +302,7 @@ namespace Bicep.Cli.IntegrationTests
             output.Should().Be("[]");
             error.Should().NotBeEmpty();
 
-            var diagnosticsFromAllFiles = invalidDataSets
-                .Zip(bicepFiles, (ds, file) => GetAllDiagnostics(ds.Bicep, file))
-                .SelectMany(e => e);
+            var diagnosticsFromAllFiles = bicepFiles.SelectMany(file => GetAllDiagnostics(file));
 
             error.Should().ContainAll(diagnosticsFromAllFiles);
         }
@@ -363,18 +359,20 @@ namespace Bicep.Cli.IntegrationTests
             }
         }
 
-        private IEnumerable<string> GetAllDiagnostics(string text, string bicepFilePath)
+        private IEnumerable<string> GetAllDiagnostics(string bicepFilePath)
         {
-            var compilation = new Compilation(TestResourceTypeProvider.Create(), SyntaxFactory.CreateFromText(text));
-            var lineStarts = TextCoordinateConverter.GetLineStarts(text);
+            var syntaxTreeGrouping = SyntaxTreeGroupingBuilder.Build(new FileResolver(), bicepFilePath);
+            var compilation = new Compilation(TestResourceTypeProvider.Create(), syntaxTreeGrouping);
 
-            return compilation.GetEntrypointSemanticModel()
-                .GetAllDiagnostics()
-                .Select(d =>
+            var output = new List<string>();
+            compilation.EmitDiagnosticsAndCheckSuccess(
+                (syntaxTree, diagnostic) => 
                 {
-                    var (line, character) = TextCoordinateConverter.GetPosition(lineStarts, d.Span.Position);
-                    return $"{bicepFilePath}({line + 1},{character + 1}) : {d.Level} {d.Code}: {d.Message}";
+                    var (line, character) = TextCoordinateConverter.GetPosition(syntaxTree.LineStarts, diagnostic.Span.Position);
+                    output.Add($"{syntaxTree.FilePath}({line + 1},{character + 1}) : {diagnostic.Level} {diagnostic.Code}: {diagnostic.Message}");
                 });
+
+            return output;
         }
 
         private static IEnumerable<object[]> GetValidDataSets() => DataSets

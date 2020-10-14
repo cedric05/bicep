@@ -24,17 +24,21 @@ namespace Bicep.Core.SemanticModel
         public override SymbolKind Kind => SymbolKind.Module;
 
         public SemanticModel? TryGetSemanticModel(out ErrorDiagnostic? failureDiagnostic)
-        {
+        {            
             if (Context.Compilation.SyntaxTreeGrouping.ModuleFailureLookup.TryGetValue(this.DeclaringModule, out var moduleFailureDiagnostic))
             {
                 failureDiagnostic = moduleFailureDiagnostic(DiagnosticBuilder.ForPosition(this.DeclaringModule.Path));
                 return null;
             }
 
-            var syntaxTree = Context.Compilation.SyntaxTreeGrouping.ModuleLookup[this.DeclaringModule];
+            if (Context.Compilation.SyntaxTreeGrouping.ModuleLookup.TryGetValue(this.DeclaringModule, out var syntaxTree))
+            {
+                failureDiagnostic = null;
+                return Context.Compilation.GetSemanticModel(syntaxTree);
+            }
 
-            failureDiagnostic = null;
-            return Context.Compilation.GetSemanticModel(syntaxTree);
+            failureDiagnostic = DiagnosticBuilder.ForPosition(this.DeclaringModule.Path).GenericModuleLoadFailure();
+            return null;
         }
 
         public override IEnumerable<Symbol> Descendants
