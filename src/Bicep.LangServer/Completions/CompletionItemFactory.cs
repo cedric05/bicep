@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 using System.Text;
+using Bicep.Core;
 using Bicep.Core.Parser;
 using Bicep.Core.TypeSystem;
 using Bicep.LanguageServer.Snippets;
@@ -12,7 +13,7 @@ namespace Bicep.LanguageServer.Completions
     {
         private const string MarkdownNewLine = "  \n";
 
-        public static CompletionItem CreatePropertyCompletion(TypeProperty property)
+        public static CompletionItem CreatePropertyNameCompletion(TypeProperty property)
         {
             return new CompletionItem
             {
@@ -20,8 +21,8 @@ namespace Bicep.LanguageServer.Completions
                 Label = property.Name,
                 InsertTextFormat = InsertTextFormat.PlainText,
                 // property names containg spaces need to be escaped
-                InsertText = Lexer.IsValidIdentifier(property.Name) ? property.Name : StringUtils.EscapeBicepString(property.Name),
-                CommitCharacters = new Container<string>(" ", ":"),
+                InsertText = IsPropertyNameEscapingRequired(property) ? StringUtils.EscapeBicepString(property.Name) : property.Name,
+                CommitCharacters = new Container<string>(":"),
                 Detail = FormatPropertyDetail(property),
                 Documentation = new StringOrMarkupContent(new MarkupContent
                 {
@@ -31,18 +32,39 @@ namespace Bicep.LanguageServer.Completions
             };
         }
 
-        public static CompletionItem CreateKeywordCompletion(string keyword, string detail) =>
+        public static CompletionItem CreatePlaintextCompletion(CompletionItemKind kind, string insertText, string detail) =>
             new CompletionItem
             {
-                Kind = CompletionItemKind.Keyword,
-                Label = keyword,
+                Kind = kind,
+                Label = insertText,
                 InsertTextFormat = InsertTextFormat.PlainText,
-                InsertText = keyword,
-                CommitCharacters = new Container<string>(" "),
+                InsertText = insertText,
                 Detail = detail
             };
 
-        public static CompletionItem CreateSnippetCompletion(string label, string detail, string snippet)
+        /// <summary>
+        /// Creates a completion that inserts a snippet. The user may not necessarily know that a snippet is being inserted.
+        /// </summary>
+        public static CompletionItem CreateSnippetCompletion(CompletionItemKind kind, string label, string snippet, string detail)
+        {
+            return new CompletionItem
+            {
+                Kind = kind,
+                Label = label,
+                InsertTextFormat = InsertTextFormat.Snippet,
+                InsertText = snippet,
+                Detail = detail
+            };
+        }
+
+        public static CompletionItem CreateKeywordCompletion(string keyword, string detail) => CreatePlaintextCompletion(CompletionItemKind.Keyword, keyword, detail);
+
+        public static CompletionItem CreateTypeCompletion(TypeSymbol type) => CreatePlaintextCompletion(CompletionItemKind.Class, type.Name, type.Name);
+
+        /// <summary>
+        /// Creates a completion with a contextual snippet. This will look like a snippet to the user.
+        /// </summary>
+        public static CompletionItem CreateContextualSnippetCompletion(string label, string detail, string snippet)
         {
             return new CompletionItem
             {
@@ -59,16 +81,10 @@ namespace Bicep.LanguageServer.Completions
             };
         }
 
-        public static CompletionItem CreateTypeCompletion(TypeSymbol type) =>
-            new CompletionItem
-            {
-                Kind = CompletionItemKind.Class,
-                Label = type.Name,
-                InsertTextFormat = InsertTextFormat.PlainText,
-                InsertText = type.Name,
-                CommitCharacters = new Container<string>(" "),
-                Detail = type.Name
-            };
+        private static bool IsPropertyNameEscapingRequired(TypeProperty property)
+        {
+            return !Lexer.IsValidIdentifier(property.Name) || LanguageConstants.Keywords.ContainsKey(property.Name);
+        }
 
         private static string FormatPropertyDetail(TypeProperty property) =>
             property.Flags.HasFlag(TypePropertyFlags.Required)

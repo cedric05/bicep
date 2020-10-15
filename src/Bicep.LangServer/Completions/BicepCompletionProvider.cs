@@ -28,50 +28,50 @@ namespace Bicep.LanguageServer.Completions
             if (completionContext.Kind.HasFlag(BicepCompletionContextKind.DeclarationStart))
             {
                 yield return CompletionItemFactory.CreateKeywordCompletion(LanguageConstants.ParameterKeyword, "Parameter keyword");
-                yield return CompletionItemFactory.CreateSnippetCompletion(LanguageConstants.ParameterKeyword, "Parameter declaration", "param ${1:Identifier} ${2:Type}");
-                yield return CompletionItemFactory.CreateSnippetCompletion(LanguageConstants.ParameterKeyword, "Parameter declaration with default value", "param ${1:Identifier} ${2:Type} = ${3:DefaultValue}");
-                yield return CompletionItemFactory.CreateSnippetCompletion(LanguageConstants.ParameterKeyword, "Parameter declaration with default and allowed values", @"param ${1:Identifier} ${2:Type} {
+                yield return CompletionItemFactory.CreateContextualSnippetCompletion(LanguageConstants.ParameterKeyword, "Parameter declaration", "param ${1:Identifier} ${2:Type}");
+                yield return CompletionItemFactory.CreateContextualSnippetCompletion(LanguageConstants.ParameterKeyword, "Parameter declaration with default value", "param ${1:Identifier} ${2:Type} = ${3:DefaultValue}");
+                yield return CompletionItemFactory.CreateContextualSnippetCompletion(LanguageConstants.ParameterKeyword, "Parameter declaration with default and allowed values", @"param ${1:Identifier} ${2:Type} {
   default: $3
   allowed: [
     $4
   ]
 }");
-                yield return CompletionItemFactory.CreateSnippetCompletion(LanguageConstants.ParameterKeyword, "Parameter declaration with options", @"param ${1:Identifier} ${2:Type} {
+                yield return CompletionItemFactory.CreateContextualSnippetCompletion(LanguageConstants.ParameterKeyword, "Parameter declaration with options", @"param ${1:Identifier} ${2:Type} {
   $0
 }");
-                yield return CompletionItemFactory.CreateSnippetCompletion(LanguageConstants.ParameterKeyword, "Secure string parameter", @"param ${1:Identifier} string {
+                yield return CompletionItemFactory.CreateContextualSnippetCompletion(LanguageConstants.ParameterKeyword, "Secure string parameter", @"param ${1:Identifier} string {
   secure: true
 }");
 
                 yield return CompletionItemFactory.CreateKeywordCompletion(LanguageConstants.VariableKeyword, "Variable keyword");
-                yield return CompletionItemFactory.CreateSnippetCompletion(LanguageConstants.VariableKeyword, "Variable declaration", "var ${1:Identifier} = $0");
+                yield return CompletionItemFactory.CreateContextualSnippetCompletion(LanguageConstants.VariableKeyword, "Variable declaration", "var ${1:Identifier} = $0");
 
                 yield return CompletionItemFactory.CreateKeywordCompletion(LanguageConstants.ResourceKeyword, "Resource keyword");
-                yield return CompletionItemFactory.CreateSnippetCompletion(LanguageConstants.ResourceKeyword, "Resource with defaults", @"resource ${1:Identifier} 'Microsoft.${2:Provider}/${3:Type}@${4:Version}' = {
+                yield return CompletionItemFactory.CreateContextualSnippetCompletion(LanguageConstants.ResourceKeyword, "Resource with defaults", @"resource ${1:Identifier} 'Microsoft.${2:Provider}/${3:Type}@${4:Version}' = {
   name: $5
   location: $6
   properties: {
     $0
   }
 }");
-                yield return CompletionItemFactory.CreateSnippetCompletion(LanguageConstants.ResourceKeyword, "Child Resource with defaults", @"resource ${1:Identifier} 'Microsoft.${2:Provider}/${3:ParentType}/${4:ChildType}@${5:Version}' = {
+                yield return CompletionItemFactory.CreateContextualSnippetCompletion(LanguageConstants.ResourceKeyword, "Child Resource with defaults", @"resource ${1:Identifier} 'Microsoft.${2:Provider}/${3:ParentType}/${4:ChildType}@${5:Version}' = {
   name: $6
   properties: {
     $0
   }
 }");
-                yield return CompletionItemFactory.CreateSnippetCompletion(LanguageConstants.ResourceKeyword, "Resource without defaults", @"resource ${1:Identifier} 'Microsoft.${2:Provider}/${3:Type}@${4:Version}' = {
+                yield return CompletionItemFactory.CreateContextualSnippetCompletion(LanguageConstants.ResourceKeyword, "Resource without defaults", @"resource ${1:Identifier} 'Microsoft.${2:Provider}/${3:Type}@${4:Version}' = {
   name: $5
   $0
 }
 ");
-                yield return CompletionItemFactory.CreateSnippetCompletion(LanguageConstants.ResourceKeyword, "Child Resource without defaults", @"resource ${1:Identifier} 'Microsoft.${2:Provider}/${3:ParentType}/${4:ChildType}@${5:Version}' = {
+                yield return CompletionItemFactory.CreateContextualSnippetCompletion(LanguageConstants.ResourceKeyword, "Child Resource without defaults", @"resource ${1:Identifier} 'Microsoft.${2:Provider}/${3:ParentType}/${4:ChildType}@${5:Version}' = {
   name: $6
   $0
 }");
 
                 yield return CompletionItemFactory.CreateKeywordCompletion(LanguageConstants.OutputKeyword, "Output keyword");
-                yield return CompletionItemFactory.CreateSnippetCompletion(LanguageConstants.OutputKeyword, "Output declaration", "output ${1:Identifier} ${2:Type} = $0");
+                yield return CompletionItemFactory.CreateContextualSnippetCompletion(LanguageConstants.OutputKeyword, "Output declaration", "output ${1:Identifier} ${2:Type} = $0");
             }
         }
 
@@ -84,7 +84,7 @@ namespace Bicep.LanguageServer.Completions
         {
             // local function
             IEnumerable<CompletionItem> GetPrimitiveTypeCompletions() =>
-                LanguageConstants.DeclarationTypes.Values.Select(CompletionItemFactory.CreateTypeCompletion);
+                LanguageConstants.DeclarationTypes.Values.Select(symbol => CompletionItemFactory.CreateTypeCompletion(symbol));
 
 
             if (completionContext.Kind.HasFlag(BicepCompletionContextKind.ParameterType))
@@ -103,11 +103,11 @@ namespace Bicep.LanguageServer.Completions
 
         private static IEnumerable<CompletionItem> GetParameterTypeSnippets()
         {
-            yield return CompletionItemFactory.CreateSnippetCompletion("secureObject", "Secure object", @"object {
+            yield return CompletionItemFactory.CreateContextualSnippetCompletion("secureObject", "Secure object", @"object {
   secure: true
 }");
 
-            yield return CompletionItemFactory.CreateSnippetCompletion("secureString", "Secure string", @"string {
+            yield return CompletionItemFactory.CreateContextualSnippetCompletion("secureString", "Secure string", @"string {
   secure: true
 }");
         }
@@ -157,7 +157,7 @@ namespace Bicep.LanguageServer.Completions
             // exclude properties whose name has been specified in the object already
             return GetProperties(declaredType)
                 .Where(p => p.Flags.HasFlag(TypePropertyFlags.ReadOnly) == false && specifiedPropertyNames.Contains(p.Name) == false)
-                .Select(CompletionItemFactory.CreatePropertyCompletion);
+                .Select(CompletionItemFactory.CreatePropertyNameCompletion);
         }
 
         private static IEnumerable<TypeProperty> GetProperties(TypeSymbol type)
@@ -190,9 +190,35 @@ namespace Bicep.LanguageServer.Completions
         {
             switch (propertyType)
             {
-                case PrimitiveType primitive:
-                default:
-                    return Enumerable.Empty<CompletionItem>();
+                case PrimitiveType _ when ReferenceEquals(propertyType, LanguageConstants.Bool):
+                    yield return CompletionItemFactory.CreateKeywordCompletion(LanguageConstants.TrueKeyword, LanguageConstants.TrueKeyword);
+                    yield return CompletionItemFactory.CreateKeywordCompletion(LanguageConstants.FalseKeyword, LanguageConstants.FalseKeyword);
+                    
+                    break;
+
+                case StringLiteralType stringLiteral:
+                    yield return CompletionItemFactory.CreatePlaintextCompletion(CompletionItemKind.EnumMember, stringLiteral.Name, stringLiteral.Name);
+                    
+                    break;
+
+                case ArrayType _:
+                    yield return CompletionItemFactory.CreateSnippetCompletion(CompletionItemKind.Value, "[]", "[$0]", "[]");
+                    
+                    break;
+
+                case ObjectType _:
+                    yield return CompletionItemFactory.CreateSnippetCompletion(CompletionItemKind.Value, "{}", "{$0}", "{}");
+                    
+                    break;
+
+                case UnionType union:
+                    var aggregatedCompletions = union.Members.SelectMany(typeRef => GetPropertyValueCompletions(typeRef.Type));
+                    foreach (var completion in aggregatedCompletions)
+                    {
+                        yield return completion;
+                    }
+
+                    break;
             }
         }
     }

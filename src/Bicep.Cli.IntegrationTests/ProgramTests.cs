@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using Bicep.Cli.UnitTests;
@@ -23,7 +24,7 @@ namespace Bicep.Cli.IntegrationTests
 {
     [TestClass]
     public class ProgramTests
-    {
+    { 
         public TestContext? TestContext { get; set; }
 
         private static Program CreateProgram(TextWriter outputWriter, TextWriter errorWriter)
