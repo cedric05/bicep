@@ -22,28 +22,35 @@ namespace Bicep.LanguageServer.Completions
             TokenType.NullKeyword
         }.ToImmutableHashSet();
 
-        public BicepCompletionContext(BicepCompletionContextKind kind, ObjectSyntax? @object = null, ObjectPropertySyntax? property = null)
+        public BicepCompletionContext(BicepCompletionContextKind kind, SyntaxBase? enclosingDeclaration = null, ObjectSyntax? @object = null, ObjectPropertySyntax? property = null)
         {
             this.Kind = kind;
+            this.EnclosingDeclaration = enclosingDeclaration;
             this.Object = @object;
             this.Property = property;
         }
 
         public BicepCompletionContextKind Kind { get; }
 
+        public SyntaxBase? EnclosingDeclaration { get; }
+
         public ObjectSyntax? Object { get; }
 
         public ObjectPropertySyntax? Property { get; }
 
+
         public static BicepCompletionContext Create(ProgramSyntax syntax, int offset)
         {
             var matchingNodes = FindNodesMatchingOffset(syntax, offset);
+
+            var declaration = FindEnclosingDeclaration(matchingNodes);
+
             var kind = ConvertFlag(IsDeclarationStartContext(matchingNodes, offset), BicepCompletionContextKind.DeclarationStart) |
                        GetDeclarationTypeFlags(matchingNodes, offset) |
                        ConvertFlag(IsPropertyNameContext(matchingNodes, out var @object), BicepCompletionContextKind.PropertyName) |
                        ConvertFlag(IsPropertyValueContext(matchingNodes, offset, out var property), BicepCompletionContextKind.PropertyValue);
 
-            return new BicepCompletionContext(kind, @object, property);
+            return new BicepCompletionContext(kind, declaration, @object, property);
         }
 
         /// <summary>
@@ -236,6 +243,12 @@ namespace Bicep.LanguageServer.Completions
             }
 
             return false;
+        }
+
+        private static SyntaxBase? FindEnclosingDeclaration(List<SyntaxBase> matchingNodes)
+        {
+            var index = matchingNodes.FindLastIndex(matchingNodes.Count - 1, node => node is IDeclarationSyntax);
+            return index < 0 ? null : matchingNodes[index];
         }
     }
 }

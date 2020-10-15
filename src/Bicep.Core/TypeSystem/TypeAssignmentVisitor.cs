@@ -40,7 +40,7 @@ namespace Bicep.Core.TypeSystem
         private readonly IReadOnlyDictionary<SyntaxBase, Symbol> bindings;
         private readonly IReadOnlyDictionary<SyntaxBase, ImmutableArray<DeclaredSymbol>> cyclesBySyntax;
         private readonly IDictionary<SyntaxBase, TypeAssignment> assignedTypes;
-        private readonly IDictionary<SyntaxBase, TypeAssignment> declaredTypes;
+        private readonly IDictionary<SyntaxBase, DeclaredTypeAssignment> declaredTypes;
         private readonly SyntaxHierarchy hierarchy;
 
         public TypeAssignmentVisitor(
@@ -58,7 +58,7 @@ namespace Bicep.Core.TypeSystem
             this.bindings = bindings;
             this.cyclesBySyntax = cyclesBySyntax;
             this.assignedTypes = new Dictionary<SyntaxBase, TypeAssignment>();
-            this.declaredTypes = new Dictionary<SyntaxBase, TypeAssignment>();
+            this.declaredTypes = new Dictionary<SyntaxBase, DeclaredTypeAssignment>();
             this.hierarchy = hierarchy;
         }
 
@@ -74,7 +74,7 @@ namespace Bicep.Core.TypeSystem
             return typeAssignment;
         }
 
-        private TypeAssignment? GetDeclaredTypeAssignment(SyntaxBase syntax)
+        public DeclaredTypeAssignment? GetDeclaredTypeAssignment(SyntaxBase syntax)
         {
             // causes stack overflow Visit(syntax);
 
@@ -116,7 +116,15 @@ namespace Bicep.Core.TypeSystem
         {
             if (typeReference != null)
             {
-                this.declaredTypes[syntax] = new TypeAssignment(typeReference);
+                AssignDeclaredType(syntax, new DeclaredTypeAssignment(typeReference));
+            }
+        }
+
+        private void AssignDeclaredType(SyntaxBase syntax, DeclaredTypeAssignment? assignment)
+        {
+            if (assignment != null)
+            {
+                this.declaredTypes[syntax] = assignment;
             }
         }
 
@@ -332,7 +340,7 @@ namespace Bicep.Core.TypeSystem
         public override void VisitObjectPropertySyntax(ObjectPropertySyntax syntax)
             => AssignType(syntax, () =>
             {
-                 AssignDeclaredType(syntax, GetDeclaredTypeInternal(syntax));
+                 AssignDeclaredType(syntax, GetDeclaredTypeAssignmentInternal(syntax));
 
                 var errors = new List<ErrorDiagnostic>();
                 var types = new List<TypeSymbol>();
@@ -1047,8 +1055,11 @@ namespace Bicep.Core.TypeSystem
             return null;
         }
 
-        private TypeSymbol? GetDeclaredTypeInternal(ObjectPropertySyntax syntax)
+        private DeclaredTypeAssignment? GetDeclaredTypeAssignmentInternal(ObjectPropertySyntax syntax)
         {
+            // local function
+            DeclaredTypeFlags ConvertFlags(TypePropertyFlags flags) => flags.HasFlag(TypePropertyFlags.Constant) ? DeclaredTypeFlags.Constant : DeclaredTypeFlags.None;
+
             var propertyName = syntax.TryGetKeyText();
             var parent = this.hierarchy.GetParent(syntax);
             if (propertyName == null || parent == null)
@@ -1066,13 +1077,13 @@ namespace Bicep.Core.TypeSystem
                     // lookup declared property
                     if (objectType.Properties.TryGetValue(propertyName, out var property))
                     {
-                        return property.TypeReference.Type;
+                        return new DeclaredTypeAssignment(property.TypeReference.Type, ConvertFlags(property.Flags));
                     }
 
                     // if there are additional properties, try those
                     if (objectType.AdditionalPropertiesType != null)
                     {
-                        return objectType.AdditionalPropertiesType.Type;
+                        return new DeclaredTypeAssignment(objectType.AdditionalPropertiesType.Type, ConvertFlags(objectType.AdditionalPropertiesFlags));
                     }
 
                     break;
@@ -1081,7 +1092,7 @@ namespace Bicep.Core.TypeSystem
                     if (string.Equals(propertyName, discriminated.DiscriminatorProperty.Name, LanguageConstants.IdentifierComparison))
                     {
                         // the property is the discriminator property - use its type
-                        return discriminated.DiscriminatorProperty.TypeReference.Type;
+                        return new DeclaredTypeAssignment(discriminated.DiscriminatorProperty.TypeReference.Type);
                     }
 
                     break;

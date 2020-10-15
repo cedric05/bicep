@@ -23,9 +23,9 @@ namespace Bicep.LanguageServer.Completions
                 .Concat(GetObjectPropertyValueCompletions(model, context));
         }
 
-        private IEnumerable<CompletionItem> GetDeclarationCompletions(BicepCompletionContext completionContext)
+        private IEnumerable<CompletionItem> GetDeclarationCompletions(BicepCompletionContext context)
         {
-            if (completionContext.Kind.HasFlag(BicepCompletionContextKind.DeclarationStart))
+            if (context.Kind.HasFlag(BicepCompletionContextKind.DeclarationStart))
             {
                 yield return CompletionItemFactory.CreateKeywordCompletion(LanguageConstants.ParameterKeyword, "Parameter keyword");
                 yield return CompletionItemFactory.CreateContextualSnippetCompletion(LanguageConstants.ParameterKeyword, "Parameter declaration", "param ${1:Identifier} ${2:Type}");
@@ -75,24 +75,24 @@ namespace Bicep.LanguageServer.Completions
             }
         }
 
-        private IEnumerable<CompletionItem> GetSymbolCompletions(SemanticModel model, BicepCompletionContext completionContext) =>
-            completionContext.Kind == BicepCompletionContextKind.None
-                ? GetAccessibleSymbols(model).Select(sym => sym.ToCompletionItem())
+        private IEnumerable<CompletionItem> GetSymbolCompletions(SemanticModel model, BicepCompletionContext context) =>
+            context.Kind == BicepCompletionContextKind.None
+                ? GetAccessibleSymbols(model, context).Select(SymbolExtensions.ToCompletionItem)
                 : Enumerable.Empty<CompletionItem>();
 
-        private IEnumerable<CompletionItem> GetDeclarationTypeCompletions(BicepCompletionContext completionContext)
+        private IEnumerable<CompletionItem> GetDeclarationTypeCompletions(BicepCompletionContext context)
         {
             // local function
             IEnumerable<CompletionItem> GetPrimitiveTypeCompletions() =>
-                LanguageConstants.DeclarationTypes.Values.Select(symbol => CompletionItemFactory.CreateTypeCompletion(symbol));
+                LanguageConstants.DeclarationTypes.Values.Select(CompletionItemFactory.CreateTypeCompletion);
 
 
-            if (completionContext.Kind.HasFlag(BicepCompletionContextKind.ParameterType))
+            if (context.Kind.HasFlag(BicepCompletionContextKind.ParameterType))
             {
                 return GetPrimitiveTypeCompletions().Concat(GetParameterTypeSnippets());
             }
 
-            if (completionContext.Kind.HasFlag(BicepCompletionContextKind.OutputType))
+            if (context.Kind.HasFlag(BicepCompletionContextKind.OutputType))
             {
                 return GetPrimitiveTypeCompletions();
             }
@@ -112,19 +112,35 @@ namespace Bicep.LanguageServer.Completions
 }");
         }
 
-        private static IEnumerable<Symbol> GetAccessibleSymbols(SemanticModel model)
+        private static IEnumerable<Symbol> GetAccessibleSymbols(SemanticModel model, BicepCompletionContext context)
         {
             var accessibleSymbols = new Dictionary<string, Symbol>();
+
+            var enclosingDeclarationSymbol = context.EnclosingDeclaration == null 
+                ? null
+                : model.GetSymbolInfo(context.EnclosingDeclaration);
 
             // local function
             void AddAccessibleSymbols(IDictionary<string, Symbol> result, IEnumerable<Symbol> symbols)
             {
-                foreach (var declaration in symbols)
+                foreach (var symbol in symbols)
                 {
-                    if (result.ContainsKey(declaration.Name) == false)
+                    if (result.ContainsKey(symbol.Name))
                     {
-                        result.Add(declaration.Name, declaration);
+                        // a local declaration has the same name as a function
+                        // we should leave the completions for local symbol but should not include the completions for the function
+                        continue;
                     }
+
+                    if (ReferenceEquals(symbol, enclosingDeclarationSymbol))
+                    {
+                        // the symbol is the same as the symbol of the enclosing declaration
+                        // if we produce a completion with the matching identifier and the user selects it,
+                        // this will cause a cycle. even thought the type checker will catch it, let's not suggest it to the user
+                        continue;
+                    }
+
+                    result.Add(symbol.Name, symbol);
                 }
             }
 
@@ -182,8 +198,20 @@ namespace Bicep.LanguageServer.Completions
                 return Enumerable.Empty<CompletionItem>();
             }
 
-            var declaredType = model.GetDeclaredType(context.Property);
-            return GetPropertyValueCompletions(declaredType);
+            var declaredTypeAssignment = model.GetDeclaredTypeAssignment(context.Property);
+            if (declaredTypeAssignment == null)
+            {
+                return Enumerable.Empty<CompletionItem>();
+            }
+
+            var completions = GetPropertyValueCompletions(declaredTypeAssignment.Reference.Type);
+
+            if (declaredTypeAssignment.Flags != DeclaredTypeFlags.Constant)
+            {
+                completions = completions.Concat(GetAccessibleSymbols(model, context).Select(SymbolExtensions.ToCompletionItem));
+            }
+
+            return completions;
         }
 
         private static IEnumerable<CompletionItem> GetPropertyValueCompletions(TypeSymbol? propertyType)
