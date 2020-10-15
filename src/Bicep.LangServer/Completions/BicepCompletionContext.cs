@@ -43,8 +43,8 @@ namespace Bicep.LanguageServer.Completions
         {
             var matchingNodes = FindNodesMatchingOffset(syntax, offset);
 
-            var declaration = FindEnclosingDeclaration(matchingNodes);
-
+            var declaration = FindLastNodeOfType<IDeclarationSyntax, SyntaxBase>(matchingNodes, out _);
+            
             var kind = ConvertFlag(IsDeclarationStartContext(matchingNodes, offset), BicepCompletionContextKind.DeclarationStart) |
                        GetDeclarationTypeFlags(matchingNodes, offset) |
                        ConvertFlag(IsPropertyNameContext(matchingNodes, out var @object), BicepCompletionContextKind.PropertyName) |
@@ -166,19 +166,15 @@ namespace Bicep.LanguageServer.Completions
 
         private static bool IsPropertyNameContext(List<SyntaxBase> matchingNodes, out ObjectSyntax? @object)
         {
-            @object = null;
-
             // the innermost object is the most relevent one for the current cursor position
-            var objectIndex = matchingNodes.FindLastIndex(matchingNodes.Count - 1, node => node is ObjectSyntax);
-            if (objectIndex < 0)
+            @object = FindLastNodeOfType<ObjectSyntax, ObjectSyntax>(matchingNodes, out var objectIndex);
+            if (@object == null)
             {
                 // none of the matching nodes are ObjectSyntax,
                 // so we cannot possibly be in a position to begin an object property
                 return false;
             }
-
-            @object = (ObjectSyntax) matchingNodes[objectIndex];
-
+            
             // how many matching nodes remain including the object node itself
             int nodeCount = matchingNodes.Count - objectIndex;
 
@@ -207,18 +203,14 @@ namespace Bicep.LanguageServer.Completions
 
         private static bool IsPropertyValueContext(List<SyntaxBase> matchingNodes, int offset, out ObjectPropertySyntax? property)
         {
-            property = null;
-
             // find the innermost property
-            var propertyIndex = matchingNodes.FindLastIndex(matchingNodes.Count - 1, node => node is ObjectPropertySyntax);
-            if (propertyIndex < 0)
+            property = FindLastNodeOfType<ObjectPropertySyntax, ObjectPropertySyntax>(matchingNodes, out var propertyIndex);
+            if (property == null)
             {
                 // none of the nodes are object properties,
                 // so we can't possibly be in a property value context
                 return false;
             }
-
-            property = (ObjectPropertySyntax) matchingNodes[propertyIndex];
 
             // how many matching nodes remain including the object node itself
             int nodeCount = matchingNodes.Count - propertyIndex;
@@ -245,10 +237,10 @@ namespace Bicep.LanguageServer.Completions
             return false;
         }
 
-        private static SyntaxBase? FindEnclosingDeclaration(List<SyntaxBase> matchingNodes)
+        private static TResult? FindLastNodeOfType<TPredicate, TResult>(List<SyntaxBase> matchingNodes, out int index) where TResult : SyntaxBase
         {
-            var index = matchingNodes.FindLastIndex(matchingNodes.Count - 1, node => node is IDeclarationSyntax);
-            return index < 0 ? null : matchingNodes[index];
+            index = matchingNodes.FindLastIndex(matchingNodes.Count - 1, node => node is TPredicate);
+            return index < 0 ? null : matchingNodes[index] as TResult;
         }
     }
 }
